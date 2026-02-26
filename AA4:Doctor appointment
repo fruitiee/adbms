@@ -1,0 +1,229 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
+from datetime import datetime, date
+import sqlite3
+
+
+# ---------------- MODELS ----------------
+class Patient:
+    def __init__(self, name, age, phone, gender, reg_date):
+        self.name = name
+        self.age = age
+        self.phone = phone
+        self.gender = gender
+        self.registered_date = reg_date
+
+
+class Appointment:
+    def __init__(self, patient_name, date_time):
+        self.patient_name = patient_name
+        self.date_time = date_time
+
+
+# ---------------- MAIN APP ----------------
+class DoctorAppointmentApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Dr. Clinic Appointment System")
+        self.root.geometry("950x620")
+
+        self.doctor_name = "Dr. Boopathi Ellayappan"
+
+        # ---------- DATABASE ----------
+        self.conn = sqlite3.connect("clinic.db")
+        self.cursor = self.conn.cursor()
+        self.create_tables()
+
+        self.patients = []
+        self.appointments = []
+
+        self.create_widgets()
+        self.load_data()
+
+    # ---------- DATABASE TABLES ----------
+    def create_tables(self):
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS patients(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                age INTEGER,
+                phone TEXT,
+                gender TEXT,
+                registered TEXT
+            )
+        """)
+
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS appointments(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_name TEXT,
+                datetime TEXT
+            )
+        """)
+        self.conn.commit()
+
+    # ---------- LOAD DATABASE ----------
+    def load_data(self):
+        self.patients.clear()
+        self.appointments.clear()
+
+        self.cursor.execute("SELECT name,age,phone,gender,registered FROM patients")
+        for row in self.cursor.fetchall():
+            self.patients.append(Patient(*row))
+
+        self.cursor.execute("SELECT patient_name,datetime FROM appointments")
+        for row in self.cursor.fetchall():
+            self.appointments.append(
+                Appointment(row[0], datetime.strptime(row[1], "%Y-%m-%d %H:%M"))
+            )
+
+        self.refresh_patient_list()
+        self.refresh_appointment_list()
+
+    # ---------- UI ----------
+    def create_widgets(self):
+        ttk.Label(self.root,
+                  text=f"Welcome to {self.doctor_name}'s Clinic",
+                  font=("Helvetica",16,"bold")).pack(pady=10)
+
+        notebook = ttk.Notebook(self.root)
+        notebook.pack(fill="both",expand=True,padx=10,pady=10)
+
+        tab1 = ttk.Frame(notebook)
+        tab2 = ttk.Frame(notebook)
+        tab3 = ttk.Frame(notebook)
+
+        notebook.add(tab1,text="Appointments")
+        notebook.add(tab2,text="Patient List")
+        notebook.add(tab3,text="Add Patient")
+
+        self.setup_appointments_tab(tab1)
+        self.setup_patient_list_tab(tab2)
+        self.setup_add_patient_tab(tab3)
+
+    # ---------- ADD PATIENT TAB ----------
+    def setup_add_patient_tab(self, tab):
+        frame = ttk.LabelFrame(tab,text="Register Patient",padding=15)
+        frame.pack(fill="both",expand=True,padx=20,pady=20)
+
+        labels=["Full Name *","Age *","Phone Number *","Gender"]
+        self.patient_entries={}
+
+        for i,l in enumerate(labels):
+            ttk.Label(frame,text=l).grid(row=i,column=0,pady=10)
+            e=ttk.Entry(frame,width=40)
+            e.grid(row=i,column=1,pady=10)
+            self.patient_entries[l]=e
+
+        ttk.Button(frame,text="Register Patient",
+                   command=self.add_new_patient).grid(row=4,columnspan=2,pady=20)
+
+    # ---------- PATIENT LIST ----------
+    def setup_patient_list_tab(self, tab):
+        self.patient_tree=ttk.Treeview(
+            tab,
+            columns=("Name","Age","Phone","Gender","Registered"),
+            show="headings"
+        )
+
+        for c in ("Name","Age","Phone","Gender","Registered"):
+            self.patient_tree.heading(c,text=c)
+
+        self.patient_tree.pack(fill="both",expand=True,padx=10,pady=10)
+
+    # ---------- APPOINTMENTS ----------
+    def setup_appointments_tab(self, tab):
+        frame=ttk.Frame(tab)
+        frame.pack(pady=10)
+
+        ttk.Label(frame,text="Patient Name").grid(row=0,column=0)
+        self.app_patient_entry=ttk.Entry(frame,width=30)
+        self.app_patient_entry.grid(row=0,column=1)
+
+        ttk.Label(frame,text="YYYY-MM-DD HH:MM").grid(row=1,column=0)
+        self.app_datetime_entry=ttk.Entry(frame,width=30)
+        self.app_datetime_entry.grid(row=1,column=1)
+
+        ttk.Button(frame,text="Book",
+                   command=self.book_appointment).grid(row=2,columnspan=2,pady=10)
+
+        self.app_tree=ttk.Treeview(
+            tab,
+            columns=("Patient","DateTime"),
+            show="headings"
+        )
+        self.app_tree.heading("Patient",text="Patient")
+        self.app_tree.heading("DateTime",text="DateTime")
+        self.app_tree.pack(fill="both",expand=True,padx=10,pady=10)
+
+    # ---------- ADD PATIENT ----------
+    def add_new_patient(self):
+        try:
+            name=self.patient_entries["Full Name *"].get()
+            age=int(self.patient_entries["Age *"].get())
+            phone=self.patient_entries["Phone Number *"].get()
+            gender=self.patient_entries["Gender"].get() or "Not specified"
+            reg=date.today().strftime("%Y-%m-%d")
+
+            self.cursor.execute("""
+                INSERT INTO patients(name,age,phone,gender,registered)
+                VALUES(?,?,?,?,?)
+            """,(name,age,phone,gender,reg))
+            self.conn.commit()
+
+            self.load_data()
+            messagebox.showinfo("Success","Patient added")
+
+            for e in self.patient_entries.values():
+                e.delete(0,tk.END)
+
+        except:
+            messagebox.showerror("Error","Invalid input")
+
+    # ---------- BOOK APPOINTMENT ----------
+    def book_appointment(self):
+        try:
+            name=self.app_patient_entry.get()
+            dt_str=self.app_datetime_entry.get()
+
+            dt=datetime.strptime(dt_str,"%Y-%m-%d %H:%M")
+
+            self.cursor.execute("""
+                INSERT INTO appointments(patient_name,datetime)
+                VALUES(?,?)
+            """,(name,dt_str))
+            self.conn.commit()
+
+            self.load_data()
+            messagebox.showinfo("Booked","Appointment saved")
+
+        except:
+            messagebox.showerror("Error","Invalid date format")
+
+    # ---------- REFRESH ----------
+    def refresh_patient_list(self):
+        self.patient_tree.delete(*self.patient_tree.get_children())
+        for p in self.patients:
+            self.patient_tree.insert("",tk.END,
+                values=(p.name,p.age,p.phone,p.gender,p.registered_date))
+
+    def refresh_appointment_list(self):
+        self.app_tree.delete(*self.app_tree.get_children())
+        for a in self.appointments:
+            self.app_tree.insert("",tk.END,
+                values=(a.patient_name,
+                        a.date_time.strftime("%Y-%m-%d %I:%M %p")))
+
+    def close_db(self):
+        self.conn.close()
+
+
+# ---------- RUN ----------
+if __name__=="__main__":
+    root=tk.Tk()
+    app=DoctorAppointmentApp(root)
+
+    root.protocol("WM_DELETE_WINDOW",
+                  lambda:(app.close_db(),root.destroy()))
+
+    root.mainloop()
