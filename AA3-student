@@ -1,0 +1,303 @@
+save the below code as student_marks.py(choose "all files")
+open the saved file and enter cmd>enter student_marks.py or python student_marks.py
+import tkinter as tk
+from tkinter import ttk, messagebox
+import sqlite3
+
+
+# ---------------- STUDENT CLASS ----------------
+class Student:
+    def __init__(self, name, class_name, marks):
+        self.name = name.strip()
+        self.class_name = class_name.strip()
+        self.marks = [float(m) for m in marks]
+
+        self.total = sum(self.marks)
+        self.average = self.total / 5
+        self.grade = self.calculate_grade()
+        self.status = self.calculate_status()
+        self.rank = None
+
+    def calculate_grade(self):
+        avg = self.average
+        if avg >= 90: return "A1"
+        elif avg >= 80: return "A2"
+        elif avg >= 70: return "B1"
+        elif avg >= 60: return "B2"
+        elif avg >= 50: return "C1"
+        elif avg >= 40: return "C2"
+        else: return "D"
+
+    def calculate_status(self):
+        if self.average < 35 or any(m < 30 for m in self.marks):
+            return "Fail"
+        return "Pass"
+
+    def to_display_tuple(self):
+        return (
+            self.name,
+            self.class_name,
+            f"{self.marks[0]:.1f}",
+            f"{self.marks[1]:.1f}",
+            f"{self.marks[2]:.1f}",
+            f"{self.marks[3]:.1f}",
+            f"{self.marks[4]:.1f}",
+            f"{self.total:.1f}",
+            f"{self.average:.2f}",
+            self.grade,
+            self.status,
+            self.rank if self.rank else "-"
+        )
+
+
+# ---------------- MAIN SYSTEM ----------------
+class StudentMarkSystem:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Student Marks & Ranking")
+        self.root.geometry("880x520")
+
+        self.students = []
+
+        # ---------- DATABASE ----------
+        self.conn = sqlite3.connect("students.db")
+        self.cursor = self.conn.cursor()
+        self.create_table()
+
+        self.create_widgets()
+        self.apply_style()
+        self.load_students_from_db()
+
+    # ---------- DATABASE TABLE ----------
+    def create_table(self):
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS students(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                class_name TEXT,
+                tamil REAL,
+                english REAL,
+                maths REAL,
+                science REAL,
+                social REAL
+            )
+        """)
+        self.conn.commit()
+
+    # ---------- LOAD FROM DATABASE ----------
+    def load_students_from_db(self):
+        self.students.clear()
+
+        self.cursor.execute("""
+            SELECT name,class_name,tamil,english,maths,science,social FROM students
+        """)
+        rows = self.cursor.fetchall()
+
+        for row in rows:
+            name, cls, *marks = row
+            self.students.append(Student(name, cls, marks))
+
+        self.show_all_and_rank()
+
+    # ---------- STYLE ----------
+    def apply_style(self):
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Treeview.Heading", font=("Helvetica", 10, "bold"))
+        style.configure("Treeview", font=("Helvetica", 9), rowheight=22)
+
+    # ---------- UI ----------
+    def create_widgets(self):
+        ttk.Label(self.root, text="Student Marks Management",
+                  font=("Helvetica", 14, "bold")).pack(pady=8)
+
+        form_frame = ttk.LabelFrame(self.root, text="Student Info", padding=10)
+        form_frame.pack(side=tk.LEFT, padx=10, pady=8, fill=tk.Y)
+
+        labels = ["Name *", "Class *", "Tamil", "English", "Maths", "Science", "Social"]
+        self.entries = {}
+
+        for i, txt in enumerate(labels):
+            ttk.Label(form_frame, text=txt).grid(row=i, column=0, pady=5)
+            e = ttk.Entry(form_frame, width=24)
+            e.grid(row=i, column=1, pady=5)
+            self.entries[txt] = e
+
+        btn_frame = ttk.Frame(form_frame)
+        btn_frame.grid(row=len(labels), columnspan=2, pady=10)
+
+        ttk.Button(btn_frame, text="Add", command=self.add_student).grid(row=0, column=0, padx=5)
+        ttk.Button(btn_frame, text="Update", command=self.update_student).grid(row=0, column=1, padx=5)
+        ttk.Button(btn_frame, text="Clear", command=self.clear_form).grid(row=1, columnspan=2, pady=5)
+
+        # -------- RIGHT SIDE --------
+        right_frame = ttk.Frame(self.root)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10)
+
+        columns = ("Name","Class","Tam","Eng","Mat","Sci","Soc",
+                   "Total","Avg","Grade","Status","Rank")
+
+        self.tree = ttk.Treeview(right_frame, columns=columns, show="headings", height=12)
+
+        for col in columns:
+            self.tree.heading(col, text=col)
+            self.tree.column(col, width=70, anchor="center")
+
+        self.tree.column("Name", width=140, anchor="w")
+        self.tree.pack(fill=tk.BOTH, expand=True)
+
+        self.tree.bind("<<TreeviewSelect>>", self.on_select)
+
+        bottom = ttk.Frame(right_frame)
+        bottom.pack(fill="x", pady=5)
+
+        ttk.Button(bottom, text="Delete Selected",
+                   command=self.delete_student).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(bottom, text="Delete All",
+                   command=self.delete_all).pack(side=tk.RIGHT, padx=5)
+
+    # ---------- FORM DATA ----------
+    def get_form_data(self):
+        try:
+            name = self.entries["Name *"].get().strip()
+            cls = self.entries["Class *"].get().strip()
+
+            if not name or not cls:
+                messagebox.showwarning("Required", "Name & Class required")
+                return None
+
+            marks = []
+            for sub in ["Tamil","English","Maths","Science","Social"]:
+                val = self.entries[sub].get().strip()
+                m = float(val) if val else 0.0
+                if not 0 <= m <= 100:
+                    messagebox.showerror("Invalid", "Marks must be 0–100")
+                    return None
+                marks.append(m)
+
+            return name, cls, marks
+
+        except ValueError:
+            messagebox.showerror("Error", "Marks must be numbers")
+            return None
+
+    # ---------- ADD ----------
+    def add_student(self):
+        data = self.get_form_data()
+        if not data: return
+
+        name, cls, marks = data
+
+        self.students.append(Student(name, cls, marks))
+
+        self.cursor.execute("""
+            INSERT INTO students
+            (name,class_name,tamil,english,maths,science,social)
+            VALUES (?,?,?,?,?,?,?)
+        """,(name,cls,*marks))
+        self.conn.commit()
+
+        self.show_all_and_rank()
+        self.clear_form()
+
+    # ---------- UPDATE ----------
+    def update_student(self):
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showwarning("Select","Select student")
+            return
+
+        idx = self.tree.index(sel[0])
+        data = self.get_form_data()
+        if not data: return
+
+        name, cls, marks = data
+        self.students[idx] = Student(name, cls, marks)
+
+        self.cursor.execute("""
+            UPDATE students
+            SET tamil=?,english=?,maths=?,science=?,social=?
+            WHERE name=? AND class_name=?
+        """,(*marks,name,cls))
+        self.conn.commit()
+
+        self.show_all_and_rank()
+
+    # ---------- DELETE ----------
+    def delete_student(self):
+        sel = self.tree.selection()
+        if not sel:
+            return
+
+        idx = self.tree.index(sel[0])
+        student = self.students[idx]
+
+        self.cursor.execute(
+            "DELETE FROM students WHERE name=? AND class_name=?",
+            (student.name, student.class_name)
+        )
+        self.conn.commit()
+
+        del self.students[idx]
+        self.show_all_and_rank()
+
+    def delete_all(self):
+        if messagebox.askyesno("Confirm","Delete all records?"):
+            self.cursor.execute("DELETE FROM students")
+            self.conn.commit()
+            self.students.clear()
+            self.show_all_and_rank()
+
+    # ---------- RANK ----------
+    def show_all_and_rank(self):
+        for s in self.students:
+            s.rank = None
+
+        sorted_list = sorted(self.students,key=lambda x:x.average,reverse=True)
+
+        rank = 1
+        prev = None
+        for i,s in enumerate(sorted_list):
+            if prev == s.average:
+                s.rank = rank
+            else:
+                rank = i+1
+                s.rank = rank
+            prev = s.average
+
+        self.tree.delete(*self.tree.get_children())
+
+        for s in sorted(self.students,key=lambda x:(x.class_name,x.name)):
+            self.tree.insert("",tk.END,values=s.to_display_tuple())
+
+    # ---------- SELECT ----------
+    def on_select(self,event):
+        sel = self.tree.selection()
+        if not sel: return
+
+        vals = self.tree.item(sel[0])["values"]
+        self.clear_form()
+
+        keys = ["Name *","Class *","Tamil","English","Maths","Science","Social"]
+        for k,v in zip(keys,vals[:7]):
+            self.entries[k].insert(0,v)
+
+    def clear_form(self):
+        for e in self.entries.values():
+            e.delete(0,tk.END)
+
+    # ---------- CLOSE ----------
+    def close_db(self):
+        self.conn.close()
+
+
+# ---------------- RUN ----------------
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = StudentMarkSystem(root)
+
+    root.protocol("WM_DELETE_WINDOW",
+                  lambda:(app.close_db(),root.destroy()))
+
+    root.mainloop()
