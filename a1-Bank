@@ -1,0 +1,66 @@
+
+import tkinter as tk
+from tkinter import messagebox
+
+balance = 0
+
+def create_account():
+    global balance
+    name = name_entry.get()
+    acc = acc_entry.get()
+
+    if name == "" or acc == "":
+        messagebox.showerror("Error", "All fields required")
+    else:
+        balance = 0
+        messagebox.showinfo("Success", f"Account created for {name}")
+
+def deposit():
+    global balance
+    amt = amount_entry.get()
+
+    if amt == "":
+        messagebox.showerror("Error", "Enter amount")
+    else:
+        balance += int(amt)
+        messagebox.showinfo("Success", f"Deposited ₹{amt}")
+
+def withdraw():
+    global balance
+    amt = amount_entry.get()
+
+    if amt == "":
+        messagebox.showerror("Error", "Enter amount")
+    elif int(amt) > balance:
+        messagebox.showerror("Error", "Insufficient balance")
+    else:
+        balance -= int(amt)
+        messagebox.showinfo("Success", f"Withdrawn ₹{amt}")
+
+def check_balance():
+    messagebox.showinfo("Balance", f"Current Balance: ₹{balance}")
+
+root = tk.Tk()
+root.title("Banking Management System")
+root.geometry("350x400")
+
+tk.Label(root, text="Banking Management System", font=("Arial", 14, "bold")).pack(pady=10)
+
+tk.Label(root, text="Name").pack()
+name_entry = tk.Entry(root)
+name_entry.pack()
+
+tk.Label(root, text="Account Number").pack()
+acc_entry = tk.Entry(root)
+acc_entry.pack()
+
+tk.Label(root, text="Amount").pack()
+amount_entry = tk.Entry(root)
+amount_entry.pack()
+
+tk.Button(root, text="Create Account", command=create_account, width=20).pack(pady=5)
+tk.Button(root, text="Deposit", command=deposit, width=20).pack(pady=5)
+tk.Button(root, text="Withdraw", command=withdraw, width=20).pack(pady=5)
+tk.Button(root, text="Check Balance", command=check_balance, width=20).pack(pady=5)
+
+root.mainloop()
