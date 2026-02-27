@@ -1,0 +1,120 @@
+import tkinter as tk
+from tkinter import messagebox
+import sqlite3
+
+# ---------------- Database Setup ----------------
+conn = sqlite3.connect("payroll.db")
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS employees (
+    emp_id TEXT PRIMARY KEY,
+    name TEXT,
+    department TEXT,
+    basic_salary REAL,
+    net_salary REAL
+)
+""")
+conn.commit()
+
+# ---------------- Salary Calculation ----------------
+def calculate_salary(basic):
+    hra = basic * 0.20
+    da = basic * 0.10
+    deduction = basic * 0.05
+    gross = basic + hra + da
+    net = gross - deduction
+    return net
+
+# ---------------- Functions ----------------
+def add_employee():
+    try:
+        emp_id = id_entry.get()
+        name = name_entry.get()
+        dept = dept_entry.get()
+        basic = float(salary_entry.get())
+
+        net_salary = calculate_salary(basic)
+
+        cursor.execute("INSERT INTO employees VALUES (?, ?, ?, ?, ?)",
+                       (emp_id, name, dept, basic, net_salary))
+        conn.commit()
+
+        messagebox.showinfo("Success", "Employee Added Successfully")
+        clear_fields()
+    except:
+        messagebox.showerror("Error", "Invalid Input or Employee ID Exists")
+
+def view_employees():
+    records = cursor.execute("SELECT * FROM employees").fetchall()
+    output.delete(1.0, tk.END)
+
+    for row in records:
+        output.insert(tk.END, f"ID: {row[0]}, Name: {row[1]}, Dept: {row[2]}, "
+                              f"Basic: {row[3]}, Net: {row[4]}\n")
+
+def update_employee():
+    try:
+        emp_id = id_entry.get()
+        basic = float(salary_entry.get())
+
+        net_salary = calculate_salary(basic)
+
+        cursor.execute("""
+        UPDATE employees
+        SET name=?, department=?, basic_salary=?, net_salary=?
+        WHERE emp_id=?
+        """, (name_entry.get(), dept_entry.get(), basic, net_salary, emp_id))
+
+        conn.commit()
+        messagebox.showinfo("Updated", "Employee Updated Successfully")
+        clear_fields()
+    except:
+        messagebox.showerror("Error", "Update Failed")
+
+def delete_employee():
+    emp_id = id_entry.get()
+    cursor.execute("DELETE FROM employees WHERE emp_id=?", (emp_id,))
+    conn.commit()
+    messagebox.showinfo("Deleted", "Employee Deleted Successfully")
+    clear_fields()
+
+def clear_fields():
+    id_entry.delete(0, tk.END)
+    name_entry.delete(0, tk.END)
+    dept_entry.delete(0, tk.END)
+    salary_entry.delete(0, tk.END)
+
+# ---------------- GUI ----------------
+root = tk.Tk()
+root.title("Employee Payroll System")
+root.geometry("500x550")
+
+tk.Label(root, text="Employee Payroll System",
+         font=("Arial", 16, "bold")).pack(pady=10)
+
+tk.Label(root, text="Employee ID").pack()
+id_entry = tk.Entry(root)
+id_entry.pack()
+
+tk.Label(root, text="Name").pack()
+name_entry = tk.Entry(root)
+name_entry.pack()
+
+tk.Label(root, text="Department").pack()
+dept_entry = tk.Entry(root)
+dept_entry.pack()
+
+tk.Label(root, text="Basic Salary").pack()
+salary_entry = tk.Entry(root)
+salary_entry.pack()
+
+tk.Button(root, text="Add Employee", command=add_employee).pack(pady=5)
+tk.Button(root, text="View Employees", command=view_employees).pack(pady=5)
+tk.Button(root, text="Update Employee", command=update_employee).pack(pady=5)
+tk.Button(root, text="Delete Employee", command=delete_employee).pack(pady=5)
+
+output = tk.Text(root, height=12, width=60)
+output.pack(pady=10)
+
+root.mainloop()
